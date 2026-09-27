@@ -20,13 +20,7 @@ composer require agentisend/agentisend-php
 ```
 
 No dependencies beyond curl and json, which every PHP install has. Laravel
-users can wrap it; nothing here assumes a framework. Until the Packagist page
-is live, add the repository by hand:
-
-```
-composer config repositories.agentisend vcs https://github.com/fortuneflick/agentisend-php
-composer require agentisend/agentisend-php:dev-main
-```
+users can wrap it; nothing here assumes a framework.
 
 Refusals throw `AgentiSend\ApiError` with `code`, `fix`, `docsUrl`, `requestId`
 and `retryAfterSeconds`. `retryable()` is true only for 429 and 5xx.

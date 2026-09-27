@@ -1,44 +1,32 @@
-# AgentiSend — PHP SDK
+<img src="https://agentisend.com/brand/lockup-horizontal-light.png#gh-light-mode-only" alt="AgentiSend" width="200" />
+<img src="https://agentisend.com/brand/lockup-horizontal-dark.png#gh-dark-mode-only" alt="AgentiSend" width="200" />
 
-AgentiSend is a transactional email API for AI agents and the products they run inside: verify a domain, create a key with a budget, send over REST or MCP, and read a log that says what happened to every message.
+# agentisend-php
 
-Generated from `openapi.json`. No Composer dependencies: it uses curl, which every PHP install has. Laravel users can wrap it; nothing here assumes a framework.
-
-## Install
-
-Not on Packagist yet. Clone this repository, or point Composer at it:
-
-```bash
-composer config repositories.agentisend vcs https://github.com/fortuneflick/agentisend-php
-composer require agentisend/agentisend-php:dev-main
-```
-
-The client is one file with no dependencies, so `require 'src/Client.php';` also works.
-
-## Send
+Generated from `openapi.json`. Do not edit `src/Client.php` — run `pnpm sdk:generate`.
 
 ```php
 $client = new AgentiSend\Client(); // reads AGENTISEND_API_KEY
 $sent = $client->postEmails([
-    'from' => 'receipts@yourdomain.com',
-    'to' => ['customer@example.com'],
-    'subject' => 'Your receipt',
-    'text' => 'Thanks. The details are in your account.',
+    'from' => 'Acme <hello@acme.com>', 'to' => ['you@example.com'],
+    'subject' => 'Hi', 'text' => 'Hello',
 ]);
-echo $sent['id'];
 ```
 
-Every operation in the API has a method here; the name is the verb plus the path (`POST /emails/{id}/cancel` → `postEmailsByIdCancel`), so an endpoint that exists is callable and one that does not, is not.
+Install with Composer:
 
-Refusals throw `AgentiSend\ApiError` with `code`, `fix`, `docsUrl`, `requestId` and `retryAfterSeconds`. `retryable()` is true only for 429 and 5xx.
+```
+composer require agentisend/agentisend-php
+```
 
-`src/Client.php` is generated. Do not edit it here; open an issue instead.
+No dependencies beyond curl and json, which every PHP install has. Laravel
+users can wrap it; nothing here assumes a framework. Until the Packagist page
+is live, add the repository by hand:
 
-## Links
+```
+composer config repositories.agentisend vcs https://github.com/fortuneflick/agentisend-php
+composer require agentisend/agentisend-php:dev-main
+```
 
-- Docs: <https://agentisend.com/docs>
-- API contract: <https://agentisend.com/openapi.json>
-- MCP endpoint: `https://api.agentisend.com/mcp` (bearer API key or OAuth 2.1; stdio launcher at [agentisend-mcp-server](https://github.com/fortuneflick/agentisend-mcp-server))
-- [AGENTS.md](AGENTS.md) — the short version, for an agent doing this without a person.
-
-Problems: hello@agentisend.com. Licensed MIT.
+Refusals throw `AgentiSend\ApiError` with `code`, `fix`, `docsUrl`, `requestId`
+and `retryAfterSeconds`. `retryable()` is true only for 429 and 5xx.

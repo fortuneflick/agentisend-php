@@ -459,7 +459,7 @@ class Client
     }
 
     /**
-     * The plan in force, the 14-day trial, the plans, volumes and terms on offer, and whether the signed-in person must choose a plan now.
+     * The plan in force (Free until one is bought), the plans, volumes and terms on offer, and what the signed-in person may buy.
      *
      * GET /billing/plan
      *
@@ -660,6 +660,18 @@ class Client
     public function getDomainsByIdConnect(string $id): array
     {
         return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}/connect'), null, null);
+    }
+
+    /**
+     * Newest-first timeline for one domain. Rows cover added, the first DNS check, each required record found or lost, verified, no longer verified, the 72-hour window closing, and deleted.
+     *
+     * GET /domains/{id}/events
+     *
+     * @return array<string,mixed>
+     */
+    public function getDomainsByIdEvents(string $id, ?array $query = null): array
+    {
+        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}/events'), null, $query);
     }
 
     /**
@@ -1635,7 +1647,7 @@ class Client
     }
 
     /**
-     * Console: start a Stripe Checkout for a tier, a billing term (monthly or yearly) and, on Pro and Scale, a volume.
+     * Console: start a Stripe Checkout for a tier, term and volume.
      *
      * POST /billing/checkout
      *
@@ -1644,6 +1656,18 @@ class Client
     public function postBillingCheckout(?array $body = null): array
     {
         return $this->request('POST', '/billing/checkout', $body, null);
+    }
+
+    /**
+     * Console: choose Free on the plan step. Paid plans go through POST /billing/checkout. Idempotent; owner only.
+     *
+     * POST /billing/plan
+     *
+     * @return array<string,mixed>
+     */
+    public function postBillingPlan(?array $body = null): array
+    {
+        return $this->request('POST', '/billing/plan', $body, null);
     }
 
     /**
@@ -1656,18 +1680,6 @@ class Client
     public function postBillingPortal(): array
     {
         return $this->request('POST', '/billing/portal', null, null);
-    }
-
-    /**
-     * Console: start the 14-day Starter trial — no card, Starter's inclusion, once per account. Owners and admins.
-     *
-     * POST /billing/trial
-     *
-     * @return array<string,mixed>
-     */
-    public function postBillingTrial(): array
-    {
-        return $this->request('POST', '/billing/trial', null, null);
     }
 
     /**
@@ -2256,5 +2268,17 @@ class Client
     public function postWebhooksStripe(): array
     {
         return $this->request('POST', '/webhooks/stripe', null, null);
+    }
+
+    /**
+     * Console: turn opt-in overage on (with a ceiling of extra emails per period) or off. Owner only; paid plans only.
+     *
+     * PUT /billing/overage
+     *
+     * @return array<string,mixed>
+     */
+    public function putBillingOverage(?array $body = null): array
+    {
+        return $this->request('PUT', '/billing/overage', $body, null);
     }
 }

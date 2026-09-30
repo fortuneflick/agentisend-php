@@ -1,6 +1,7 @@
 {
   "name": "agentisend/agentisend-php",
-  "description": "AgentiSend PHP client: transactional email API for AI agents, with budgets, a free preflight and refusals that name the fix.",
+  "description": "AgentiSend is a transactional email API for AI agents. PHP client with budgets, a free preflight and refusals that name the fix.",
+  "authors": [{ "name": "AgentiSend", "email": "hello@agentisend.com" }],
   "type": "library",
   "keywords": ["email", "email-api", "transactional-email", "ai-agents", "mcp", "sdk", "agentisend"],
   "homepage": "https://agentisend.com",

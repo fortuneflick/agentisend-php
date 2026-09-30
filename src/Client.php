@@ -67,6 +67,9 @@ class ApiError extends \RuntimeException
 
 class Client
 {
+    /** Sent in the user agent, so support can tell one SDK version from another. */
+    public const SDK_VERSION = '0.1.0';
+
     private string $apiKey;
     private string $baseUrl;
 
@@ -88,10 +91,18 @@ class Client
      *
      * @param array<string,mixed>|null $body
      * @param array<string,string>|null $query
+     * @param string|null $idempotencyKey Sent as the idempotency-key header,
+     *     so a retried call with the same key is applied once. Pass it on
+     *     any non-GET call.
      * @return array<string,mixed>
      */
-    public function request(string $method, string $path, ?array $body = null, ?array $query = null): array
-    {
+    public function request(
+        string $method,
+        string $path,
+        ?array $body = null,
+        ?array $query = null,
+        ?string $idempotencyKey = null
+    ): array {
         $endpoint = $this->baseUrl . $path;
         if ($query !== null && $query !== []) {
             $endpoint .= '?' . http_build_query(array_filter($query, static fn ($v) => $v !== '' && $v !== null));
@@ -100,8 +111,11 @@ class Client
         $headers = [
             'authorization: Bearer ' . $this->apiKey,
             'accept: application/json',
-            'user-agent: agentisend-php',
+            'user-agent: agentisend-php/' . self::SDK_VERSION . ' php/' . PHP_VERSION,
         ];
+        if ($idempotencyKey !== null) {
+            $headers[] = 'idempotency-key: ' . $idempotencyKey;
+        }
         $handle = curl_init($endpoint);
         curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($handle, CURLOPT_CUSTOMREQUEST, $method);
@@ -171,15 +185,15 @@ class Client
     }
 
     /**
-     * Close this account: revoke every key, pause every budget, suspend sending. Data stays readable and exportable until the retention window ends.
+     * Close this account: keys stop now.
      *
      * DELETE /account
      *
      * @return array<string,mixed>
      */
-    public function deleteAccount(): array
+    public function deleteAccount(?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', '/account', null, null);
+        return $this->request('DELETE', '/account', null, null, $idempotencyKey);
     }
 
     /**
@@ -189,9 +203,21 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function deleteApiKeysById(string $id): array
+    public function deleteApiKeysById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/api-keys/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/api-keys/{id}'), null, null, $idempotencyKey);
+    }
+
+    /**
+     * Alias of DELETE /contacts/{id}.
+     *
+     * DELETE /audiences/{audienceId}/contacts/{id}
+     *
+     * @return array<string,mixed>
+     */
+    public function deleteAudiencesByAudienceIdContactsById(string $audienceId, string $id, ?string $idempotencyKey = null): array
+    {
+        return $this->request('DELETE', str_replace(['{audienceId}', '{id}'], [$audienceId, $id], '/audiences/{audienceId}/contacts/{id}'), null, null, $idempotencyKey);
     }
 
     /**
@@ -201,105 +227,153 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function deleteContactsById(string $id): array
+    public function deleteContactsById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/contacts/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/contacts/{id}'), null, null, $idempotencyKey);
     }
 
     /**
-     * Release a dedicated IP. Traffic returns to shared automatically.
+     * Not available.
+     *
+     * DELETE /contacts/{id}/segments/{segmentId}
+     *
+     * @return array<string,mixed>
+     */
+    public function deleteContactsByIdSegmentsBySegmentId(string $id, string $segmentId, ?string $idempotencyKey = null): array
+    {
+        return $this->request('DELETE', str_replace(['{id}', '{segmentId}'], [$id, $segmentId], '/contacts/{id}/segments/{segmentId}'), null, null, $idempotencyKey);
+    }
+
+    /**
+     * Release a dedicated IP.
      *
      * DELETE /dedicated-ips/{id}
      *
      * @return array<string,mixed>
      */
-    public function deleteDedicatedIpsById(string $id): array
+    public function deleteDedicatedIpsById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/dedicated-ips/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/dedicated-ips/{id}'), null, null, $idempotencyKey);
     }
 
     /**
-     * Remove a domain and its records. Messages already sent keep their history.
+     * Remove a domain and its records.
      *
      * DELETE /domains/{id}
      *
      * @return array<string,mixed>
      */
-    public function deleteDomainsById(string $id): array
+    public function deleteDomainsById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/domains/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/domains/{id}'), null, null, $idempotencyKey);
     }
 
     /**
-     * Forget an event definition. Ingest keeps accepting the event — it just stops being checked.
+     * Delete one email you sent.
+     *
+     * DELETE /emails/{id}
+     *
+     * @return array<string,mixed>
+     */
+    public function deleteEmailsById(string $id, ?string $idempotencyKey = null): array
+    {
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/emails/{id}'), null, null, $idempotencyKey);
+    }
+
+    /**
+     * Not open yet: receiving mail is not open to customers.
+     *
+     * DELETE /emails/receiving/{id}
+     *
+     * @return array<string,mixed>
+     */
+    public function deleteEmailsReceivingById(string $id, ?string $idempotencyKey = null): array
+    {
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/emails/receiving/{id}'), null, null, $idempotencyKey);
+    }
+
+    /**
+     * Forget an event definition.
      *
      * DELETE /events/{id}
      *
      * @return array<string,mixed>
      */
-    public function deleteEventsById(string $id): array
+    public function deleteEventsById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/events/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/events/{id}'), null, null, $idempotencyKey);
     }
 
     /**
-     * Revoke one assistant connection. Tokens and the backing key die immediately.
+     * Revoke one assistant connection.
      *
      * DELETE /oauth/grants/{id}
      *
      * @return array<string,mixed>
      */
-    public function deleteOauthGrantsById(string $id): array
+    public function deleteOauthGrantsById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/oauth/grants/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/oauth/grants/{id}'), null, null, $idempotencyKey);
     }
 
     /**
-     * Delete a segment. Contacts are untouched.
+     * Delete a segment.
      *
      * DELETE /segments/{id}
      *
      * @return array<string,mixed>
      */
-    public function deleteSegmentsById(string $id): array
+    public function deleteSegmentsById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/segments/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/segments/{id}'), null, null, $idempotencyKey);
     }
 
     /**
-     * Remove one suppression row. A hard bounce you have fixed can be cleared with an API key; an unsubscribe or a spam complaint is a person’s to lift, in the console.
+     * Remove one suppression row.
      *
      * DELETE /suppressions/{id}
      *
      * @return array<string,mixed>
      */
-    public function deleteSuppressionsById(string $id): array
+    public function deleteSuppressionsById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/suppressions/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/suppressions/{id}'), null, null, $idempotencyKey);
     }
 
     /**
-     * Cancel a pending invitation. The link in the email stops working immediately.
+     * Cancel a pending invitation.
      *
      * DELETE /team/invites/{id}
      *
      * @return array<string,mixed>
      */
-    public function deleteTeamInvitesById(string $id): array
+    public function deleteTeamInvitesById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/team/invites/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/team/invites/{id}'), null, null, $idempotencyKey);
     }
 
     /**
-     * Remove a member. Their sends and keys stay; only their access ends. The last owner cannot be removed.
+     * Remove a member.
      *
      * DELETE /team/members/{id}
      *
      * @return array<string,mixed>
      */
-    public function deleteTeamMembersById(string $id): array
+    public function deleteTeamMembersById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/team/members/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/team/members/{id}'), null, null, $idempotencyKey);
+    }
+
+    /**
+     * Delete a template and its versions.
+     *
+     * DELETE /templates/{id}
+     *
+     * @return array<string,mixed>
+     */
+    public function deleteTemplatesById(string $id, ?string $idempotencyKey = null): array
+    {
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/templates/{id}'), null, null, $idempotencyKey);
     }
 
     /**
@@ -309,9 +383,9 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function deleteTopicsById(string $id): array
+    public function deleteTopicsById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/topics/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/topics/{id}'), null, null, $idempotencyKey);
     }
 
     /**
@@ -321,13 +395,13 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function deleteWebhooksById(string $id): array
+    public function deleteWebhooksById(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('DELETE', str_replace(['{id}'], [$id], '/webhooks/{id}'), null, null);
+        return $this->request('DELETE', str_replace(['{id}'], [$id], '/webhooks/{id}'), null, null, $idempotencyKey);
     }
 
     /**
-     * This account: lifecycle status, the reason it is in that state, and when it was created. Sandboxed accounts may only send to their own verified domains.
+     * This account: lifecycle status, the reason it is in that state, and when it was created.
      *
      * GET /account
      *
@@ -335,11 +409,11 @@ class Client
      */
     public function getAccount(): array
     {
-        return $this->request('GET', '/account', null, null);
+        return $this->request('GET', '/account', null, null, null);
     }
 
     /**
-     * Everything this account owns, as a zip: emails.csv (inside your retention window), suppressions.csv and domains.json. No job, no wait.
+     * A zip of this account's data, with a row count for every file in manifest.json.
      *
      * GET /account/export
      *
@@ -347,11 +421,11 @@ class Client
      */
     public function getAccountExport(): array
     {
-        return $this->request('GET', '/account/export', null, null);
+        return $this->request('GET', '/account/export', null, null, null);
     }
 
     /**
-     * Every held agent action, newest first — nothing waits invisibly. Filter by state to read the inbox or the audit trail.
+     * Every held agent action, newest first — nothing waits invisibly.
      *
      * GET /agent-actions
      *
@@ -359,11 +433,11 @@ class Client
      */
     public function getAgentActions(?array $query = null): array
     {
-        return $this->request('GET', '/agent-actions', null, $query);
+        return $this->request('GET', '/agent-actions', null, $query, null);
     }
 
     /**
-     * List API keys with 30-day request counts. Permission, domain scope and the key’s own budget ceiling are always returned (PRD F3); never the token.
+     * List API keys with 30-day request counts.
      *
      * GET /api-keys
      *
@@ -371,11 +445,35 @@ class Client
      */
     public function getApiKeys(?array $query = null): array
     {
-        return $this->request('GET', '/api-keys', null, $query);
+        return $this->request('GET', '/api-keys', null, $query, null);
     }
 
     /**
-     * Everything anyone changed on this account: keys, the kill switch, domains, approvals, standing, team and notification settings — with what each one looked like before. Newest first.
+     * Alias of GET /contacts.
+     *
+     * GET /audiences/{audienceId}/contacts
+     *
+     * @return array<string,mixed>
+     */
+    public function getAudiencesByAudienceIdContacts(string $audienceId, ?array $query = null): array
+    {
+        return $this->request('GET', str_replace(['{audienceId}'], [$audienceId], '/audiences/{audienceId}/contacts'), null, $query, null);
+    }
+
+    /**
+     * Alias of GET /contacts/{id}.
+     *
+     * GET /audiences/{audienceId}/contacts/{id}
+     *
+     * @return array<string,mixed>
+     */
+    public function getAudiencesByAudienceIdContactsById(string $audienceId, string $id): array
+    {
+        return $this->request('GET', str_replace(['{audienceId}', '{id}'], [$audienceId, $id], '/audiences/{audienceId}/contacts/{id}'), null, null, null);
+    }
+
+    /**
+     * Changes made on this account (keys, limits, kill switch, domains, webhooks, suppressions, contacts, segments, topics, templates, broadcasts, automations,…
      *
      * GET /audit-log
      *
@@ -383,7 +481,7 @@ class Client
      */
     public function getAuditLog(?array $query = null): array
     {
-        return $this->request('GET', '/audit-log', null, $query);
+        return $this->request('GET', '/audit-log', null, $query, null);
     }
 
     /**
@@ -395,7 +493,7 @@ class Client
      */
     public function getAutomations(?array $query = null): array
     {
-        return $this->request('GET', '/automations', null, $query);
+        return $this->request('GET', '/automations', null, $query, null);
     }
 
     /**
@@ -407,7 +505,7 @@ class Client
      */
     public function getAutomationsById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/automations/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/automations/{id}'), null, null, null);
     }
 
     /**
@@ -419,7 +517,7 @@ class Client
      */
     public function getAutomationsByIdRuns(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/automations/{id}/runs'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/automations/{id}/runs'), null, $query, null);
     }
 
     /**
@@ -431,7 +529,7 @@ class Client
      */
     public function getAutomationsByIdRunsByRunId(string $id, string $runid): array
     {
-        return $this->request('GET', str_replace(['{id}', '{run_id}'], [$id, $runid], '/automations/{id}/runs/{run_id}'), null, null);
+        return $this->request('GET', str_replace(['{id}', '{run_id}'], [$id, $runid], '/automations/{id}/runs/{run_id}'), null, null, null);
     }
 
     /**
@@ -443,7 +541,7 @@ class Client
      */
     public function getAutomationsByIdVersions(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/automations/{id}/versions'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/automations/{id}/versions'), null, $query, null);
     }
 
     /**
@@ -455,7 +553,7 @@ class Client
      */
     public function getBilling(): array
     {
-        return $this->request('GET', '/billing', null, null);
+        return $this->request('GET', '/billing', null, null, null);
     }
 
     /**
@@ -467,7 +565,7 @@ class Client
      */
     public function getBillingPlan(): array
     {
-        return $this->request('GET', '/billing/plan', null, null);
+        return $this->request('GET', '/billing/plan', null, null, null);
     }
 
     /**
@@ -479,7 +577,7 @@ class Client
      */
     public function getBillingSubscription(): array
     {
-        return $this->request('GET', '/billing/subscription', null, null);
+        return $this->request('GET', '/billing/subscription', null, null, null);
     }
 
     /**
@@ -491,7 +589,7 @@ class Client
      */
     public function getBroadcasts(?array $query = null): array
     {
-        return $this->request('GET', '/broadcasts', null, $query);
+        return $this->request('GET', '/broadcasts', null, $query, null);
     }
 
     /**
@@ -503,7 +601,7 @@ class Client
      */
     public function getBroadcastsById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/broadcasts/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/broadcasts/{id}'), null, null, null);
     }
 
     /**
@@ -515,7 +613,55 @@ class Client
      */
     public function getBroadcastsByIdMessages(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/broadcasts/{id}/messages'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/broadcasts/{id}/messages'), null, $query, null);
+    }
+
+    /**
+     * Render this broadcast the way a recipient would see it.
+     *
+     * GET /broadcasts/{id}/preview
+     *
+     * @return array<string,mixed>
+     */
+    public function getBroadcastsByIdPreview(string $id): array
+    {
+        return $this->request('GET', str_replace(['{id}'], [$id], '/broadcasts/{id}/preview'), null, null, null);
+    }
+
+    /**
+     * Sent, delivered, opened, clicked, bounced, complained and unsubscribed totals for one broadcast.
+     *
+     * GET /broadcasts/{id}/stats
+     *
+     * @return array<string,mixed>
+     */
+    public function getBroadcastsByIdStats(string $id): array
+    {
+        return $this->request('GET', str_replace(['{id}'], [$id], '/broadcasts/{id}/stats'), null, null, null);
+    }
+
+    /**
+     * Property names and types already stored on this account.
+     *
+     * GET /contact-properties
+     *
+     * @return array<string,mixed>
+     */
+    public function getContactProperties(): array
+    {
+        return $this->request('GET', '/contact-properties', null, null, null);
+    }
+
+    /**
+     * One stored property name and its type.
+     *
+     * GET /contact-properties/{id}
+     *
+     * @return array<string,mixed>
+     */
+    public function getContactPropertiesById(string $id): array
+    {
+        return $this->request('GET', str_replace(['{id}'], [$id], '/contact-properties/{id}'), null, null, null);
     }
 
     /**
@@ -527,7 +673,7 @@ class Client
      */
     public function getContacts(?array $query = null): array
     {
-        return $this->request('GET', '/contacts', null, $query);
+        return $this->request('GET', '/contacts', null, $query, null);
     }
 
     /**
@@ -539,11 +685,23 @@ class Client
      */
     public function getContactsById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/contacts/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/contacts/{id}'), null, null, null);
     }
 
     /**
-     * What this contact has said about every topic. A topic they never answered reports the topic default, and says so.
+     * Segments whose rules include this contact.
+     *
+     * GET /contacts/{id}/segments
+     *
+     * @return array<string,mixed>
+     */
+    public function getContactsByIdSegments(string $id): array
+    {
+        return $this->request('GET', str_replace(['{id}'], [$id], '/contacts/{id}/segments'), null, null, null);
+    }
+
+    /**
+     * What this contact has said about every topic.
      *
      * GET /contacts/{id}/topics
      *
@@ -551,7 +709,7 @@ class Client
      */
     public function getContactsByIdTopics(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/contacts/{id}/topics'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/contacts/{id}/topics'), null, $query, null);
     }
 
     /**
@@ -563,7 +721,7 @@ class Client
      */
     public function getDedicatedIps(?array $query = null): array
     {
-        return $this->request('GET', '/dedicated-ips', null, $query);
+        return $this->request('GET', '/dedicated-ips', null, $query, null);
     }
 
     /**
@@ -575,7 +733,7 @@ class Client
      */
     public function getDedicatedIpsRamp(): array
     {
-        return $this->request('GET', '/dedicated-ips/ramp', null, null);
+        return $this->request('GET', '/dedicated-ips/ramp', null, null, null);
     }
 
     /**
@@ -587,11 +745,11 @@ class Client
      */
     public function getDedicatedIpsRouteDecisionByMessageId(string $messageId): array
     {
-        return $this->request('GET', str_replace(['{messageId}'], [$messageId], '/dedicated-ips/route-decision/{messageId}'), null, null);
+        return $this->request('GET', str_replace(['{messageId}'], [$messageId], '/dedicated-ips/route-decision/{messageId}'), null, null, null);
     }
 
     /**
-     * Aggregate authentication reports for your domains. Aligned and failing volume per day, and every address sending as you, flagged when it is not one of ours.
+     * Authentication reports for verified domains.
      *
      * GET /deliverability/dmarc
      *
@@ -599,7 +757,7 @@ class Client
      */
     public function getDeliverabilityDmarc(?array $query = null): array
     {
-        return $this->request('GET', '/deliverability/dmarc', null, $query);
+        return $this->request('GET', '/deliverability/dmarc', null, $query, null);
     }
 
     /**
@@ -611,11 +769,11 @@ class Client
      */
     public function getDeliverabilityDomains(?array $query = null): array
     {
-        return $this->request('GET', '/deliverability/domains', null, $query);
+        return $this->request('GET', '/deliverability/domains', null, $query, null);
     }
 
     /**
-     * Per-domain reputation: live rates over the rolling window, daily snapshots, the thresholds those rates are judged against, the bounce breakdown by class with its remediation, and the receiving domains rejecting the most.
+     * Per-domain reputation: live rates over the rolling window, daily snapshots, the thresholds those rates are judged against, the bounce breakdown by class with…
      *
      * GET /deliverability/domains/{id}
      *
@@ -623,11 +781,11 @@ class Client
      */
     public function getDeliverabilityDomainsById(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/deliverability/domains/{id}'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/deliverability/domains/{id}'), null, $query, null);
     }
 
     /**
-     * List domains. Items omit records; GET /domains/:id has the DNS sheet.
+     * List domains.
      *
      * GET /domains
      *
@@ -635,7 +793,7 @@ class Client
      */
     public function getDomains(?array $query = null): array
     {
-        return $this->request('GET', '/domains', null, $query);
+        return $this->request('GET', '/domains', null, $query, null);
     }
 
     /**
@@ -647,11 +805,11 @@ class Client
      */
     public function getDomainsById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}'), null, null, null);
     }
 
     /**
-     * Alias of GET /domains/:id/setup. Domain Connect: detect the DNS provider and hand back the exact records to add.
+     * Alias of GET /domains/:id/setup.
      *
      * GET /domains/{id}/connect
      *
@@ -659,11 +817,11 @@ class Client
      */
     public function getDomainsByIdConnect(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}/connect'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}/connect'), null, null, null);
     }
 
     /**
-     * Newest-first timeline for one domain. Rows cover added, the first DNS check, each required record found or lost, verified, no longer verified, the 72-hour window closing, and deleted.
+     * Newest-first timeline for one domain.
      *
      * GET /domains/{id}/events
      *
@@ -671,7 +829,7 @@ class Client
      */
     public function getDomainsByIdEvents(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}/events'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}/events'), null, $query, null);
     }
 
     /**
@@ -683,11 +841,11 @@ class Client
      */
     public function getDomainsByIdSetup(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}/setup'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}/setup'), null, null, null);
     }
 
     /**
-     * Long-poll a domain until it is verified or failed, or until timeout (0–25 seconds). timeout=0 is a snapshot. Does not re-check DNS; the server checks on its own.
+     * Long-poll a domain until it is verified or failed, or until timeout (0–25 seconds).
      *
      * GET /domains/{id}/wait
      *
@@ -695,11 +853,11 @@ class Client
      */
     public function getDomainsByIdWait(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}/wait'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/domains/{id}/wait'), null, $query, null);
     }
 
     /**
-     * List messages. Every console filter is a query param here (PRD F3).
+     * List messages.
      *
      * GET /emails
      *
@@ -707,7 +865,7 @@ class Client
      */
     public function getEmails(?array $query = null): array
     {
-        return $this->request('GET', '/emails', null, $query);
+        return $this->request('GET', '/emails', null, $query, null);
     }
 
     /**
@@ -719,11 +877,11 @@ class Client
      */
     public function getEmailsById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}'), null, null, null);
     }
 
     /**
-     * What this email carried. Ids are stable positions; bytes_available says whether the payload is still retrievable.
+     * What this email carried.
      *
      * GET /emails/{id}/attachments
      *
@@ -731,11 +889,11 @@ class Client
      */
     public function getEmailsByIdAttachments(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}/attachments'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}/attachments'), null, $query, null);
     }
 
     /**
-     * The bytes of one attachment, exactly as they were sent. Served as an inert download.
+     * The bytes of one attachment, exactly as they were sent.
      *
      * GET /emails/{id}/attachments/{aid}
      *
@@ -743,11 +901,11 @@ class Client
      */
     public function getEmailsByIdAttachmentsByAid(string $id, string $aid): array
     {
-        return $this->request('GET', str_replace(['{id}', '{aid}'], [$id, $aid], '/emails/{id}/attachments/{aid}'), null, null);
+        return $this->request('GET', str_replace(['{id}', '{aid}'], [$id, $aid], '/emails/{id}/attachments/{aid}'), null, null, null);
     }
 
     /**
-     * Download this email as .eml.
+     * Download this email as.eml.
      *
      * GET /emails/{id}/eml
      *
@@ -755,7 +913,7 @@ class Client
      */
     public function getEmailsByIdEml(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}/eml'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}/eml'), null, null, null);
     }
 
     /**
@@ -767,7 +925,7 @@ class Client
      */
     public function getEmailsByIdEvents(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}/events'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}/events'), null, $query, null);
     }
 
     /**
@@ -779,7 +937,7 @@ class Client
      */
     public function getEmailsByIdExplain(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}/explain'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}/explain'), null, null, null);
     }
 
     /**
@@ -791,7 +949,7 @@ class Client
      */
     public function getEmailsByIdMime(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}/mime'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/{id}/mime'), null, null, null);
     }
 
     /**
@@ -803,11 +961,11 @@ class Client
      */
     public function getEmailsExportCsv(?array $query = null): array
     {
-        return $this->request('GET', '/emails/export.csv', null, $query);
+        return $this->request('GET', '/emails/export.csv', null, $query, null);
     }
 
     /**
-     * Alias of GET /metrics. start_date and end_date are accepted as names for since and until.
+     * Alias of GET /metrics.
      *
      * GET /emails/metrics
      *
@@ -815,11 +973,11 @@ class Client
      */
     public function getEmailsMetrics(?array $query = null): array
     {
-        return $this->request('GET', '/emails/metrics', null, $query);
+        return $this->request('GET', '/emails/metrics', null, $query, null);
     }
 
     /**
-     * Mail received at this account’s domains, newest first. Filter by recipient, sender or date range.
+     * Not open yet: mail received at this account’s domains, newest first.
      *
      * GET /emails/receiving
      *
@@ -827,11 +985,11 @@ class Client
      */
     public function getEmailsReceiving(?array $query = null): array
     {
-        return $this->request('GET', '/emails/receiving', null, $query);
+        return $this->request('GET', '/emails/receiving', null, $query, null);
     }
 
     /**
-     * One received email: headers, text and HTML bodies as data, and the attachments it carried.
+     * Not open yet: one received email: headers, text and HTML bodies as data, and the attachments it carried.
      *
      * GET /emails/receiving/{id}
      *
@@ -839,11 +997,11 @@ class Client
      */
     public function getEmailsReceivingById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/receiving/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/receiving/{id}'), null, null, null);
     }
 
     /**
-     * What this received email carried. Ids are stable positions in the message.
+     * Not open yet: what this received email carried.
      *
      * GET /emails/receiving/{id}/attachments
      *
@@ -851,11 +1009,11 @@ class Client
      */
     public function getEmailsReceivingByIdAttachments(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/receiving/{id}/attachments'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/receiving/{id}/attachments'), null, $query, null);
     }
 
     /**
-     * The bytes of one received attachment, as an inert download — always octet-stream, never the sender’s declared type.
+     * Not open yet: the bytes of one received attachment, as an inert download — always octet-stream, never the sender’s declared type.
      *
      * GET /emails/receiving/{id}/attachments/{aid}
      *
@@ -863,11 +1021,11 @@ class Client
      */
     public function getEmailsReceivingByIdAttachmentsByAid(string $id, string $aid): array
     {
-        return $this->request('GET', str_replace(['{id}', '{aid}'], [$id, $aid], '/emails/receiving/{id}/attachments/{aid}'), null, null);
+        return $this->request('GET', str_replace(['{id}', '{aid}'], [$id, $aid], '/emails/receiving/{id}/attachments/{aid}'), null, null, null);
     }
 
     /**
-     * The stored RFC 5322 source, byte for byte. Served as an attachment with sniffing off — it is someone else’s content.
+     * Not open yet: the stored RFC 5322 source, byte for byte.
      *
      * GET /emails/receiving/{id}/raw
      *
@@ -875,11 +1033,11 @@ class Client
      */
     public function getEmailsReceivingByIdRaw(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/receiving/{id}/raw'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/emails/receiving/{id}/raw'), null, null, null);
     }
 
     /**
-     * Received mail grouped into threads by Message-ID / In-Reply-To / References, newest thread first.
+     * Not open yet: received mail grouped into threads by Message-ID / In-Reply-To / References, newest thread first.
      *
      * GET /emails/receiving/threads
      *
@@ -887,7 +1045,7 @@ class Client
      */
     public function getEmailsReceivingThreads(?array $query = null): array
     {
-        return $this->request('GET', '/emails/receiving/threads', null, $query);
+        return $this->request('GET', '/emails/receiving/threads', null, $query, null);
     }
 
     /**
@@ -899,7 +1057,7 @@ class Client
      */
     public function getEvents(?array $query = null): array
     {
-        return $this->request('GET', '/events', null, $query);
+        return $this->request('GET', '/events', null, $query, null);
     }
 
     /**
@@ -911,7 +1069,7 @@ class Client
      */
     public function getEventsById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/events/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/events/{id}'), null, null, null);
     }
 
     /**
@@ -923,7 +1081,7 @@ class Client
      */
     public function getHealth(): array
     {
-        return $this->request('GET', '/health', null, null);
+        return $this->request('GET', '/health', null, null, null);
     }
 
     /**
@@ -935,7 +1093,7 @@ class Client
      */
     public function getLimitsKeys(?array $query = null): array
     {
-        return $this->request('GET', '/limits/keys', null, $query);
+        return $this->request('GET', '/limits/keys', null, $query, null);
     }
 
     /**
@@ -947,11 +1105,11 @@ class Client
      */
     public function getLimitsKeysById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/limits/keys/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/limits/keys/{id}'), null, null, null);
     }
 
     /**
-     * Every API request this account made: method, route, status, duration and the refusal code. Filter by date range, status, status class, method, route or key.
+     * Every API request this account made, with method, route, status and any refusal.
      *
      * GET /logs
      *
@@ -959,11 +1117,11 @@ class Client
      */
     public function getLogs(?array $query = null): array
     {
-        return $this->request('GET', '/logs', null, $query);
+        return $this->request('GET', '/logs', null, $query, null);
     }
 
     /**
-     * One request, by log id. The x-request-id the caller saw is on the row.
+     * One request, by log id.
      *
      * GET /logs/{id}
      *
@@ -971,7 +1129,7 @@ class Client
      */
     public function getLogsById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/logs/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/logs/{id}'), null, null, null);
     }
 
     /**
@@ -983,11 +1141,11 @@ class Client
      */
     public function getMetrics(?array $query = null): array
     {
-        return $this->request('GET', '/metrics', null, $query);
+        return $this->request('GET', '/metrics', null, $query, null);
     }
 
     /**
-     * Conditions this account should know about. Open rows are live; resolved ones ended. One row per condition, counted, never one per re-fire.
+     * Conditions this account should know about.
      *
      * GET /notifications
      *
@@ -995,11 +1153,11 @@ class Client
      */
     public function getNotifications(?array $query = null): array
     {
-        return $this->request('GET', '/notifications', null, $query);
+        return $this->request('GET', '/notifications', null, $query, null);
     }
 
     /**
-     * Which channels each notification type uses. A type with no stored row is on for both.
+     * Which channels each notification type uses.
      *
      * GET /notifications/preferences
      *
@@ -1007,7 +1165,7 @@ class Client
      */
     public function getNotificationsPreferences(): array
     {
-        return $this->request('GET', '/notifications/preferences', null, null);
+        return $this->request('GET', '/notifications/preferences', null, null, null);
     }
 
     /**
@@ -1019,7 +1177,7 @@ class Client
      */
     public function getOauthGrants(?array $query = null): array
     {
-        return $this->request('GET', '/oauth/grants', null, $query);
+        return $this->request('GET', '/oauth/grants', null, $query, null);
     }
 
     /**
@@ -1031,7 +1189,7 @@ class Client
      */
     public function getOpenapiJson(): array
     {
-        return $this->request('GET', '/openapi.json', null, null);
+        return $this->request('GET', '/openapi.json', null, null, null);
     }
 
     /**
@@ -1043,7 +1201,7 @@ class Client
      */
     public function getSegments(?array $query = null): array
     {
-        return $this->request('GET', '/segments', null, $query);
+        return $this->request('GET', '/segments', null, $query, null);
     }
 
     /**
@@ -1055,7 +1213,19 @@ class Client
      */
     public function getSegmentsById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/segments/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/segments/{id}'), null, null, null);
+    }
+
+    /**
+     * Contacts in this segment.
+     *
+     * GET /segments/{id}/contacts
+     *
+     * @return array<string,mixed>
+     */
+    public function getSegmentsByIdContacts(string $id, ?array $query = null): array
+    {
+        return $this->request('GET', str_replace(['{id}'], [$id], '/segments/{id}/contacts'), null, $query, null);
     }
 
     /**
@@ -1067,11 +1237,11 @@ class Client
      */
     public function getSegmentsByIdMembers(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/segments/{id}/members'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/segments/{id}/members'), null, null, null);
     }
 
     /**
-     * Public per-component health. Every component reports what it actually checked; one that cannot be checked says so instead of claiming green.
+     * Public per-component health.
      *
      * GET /status
      *
@@ -1079,11 +1249,11 @@ class Client
      */
     public function getStatus(): array
     {
-        return $this->request('GET', '/status', null, null);
+        return $this->request('GET', '/status', null, null, null);
     }
 
     /**
-     * Daily uptime per component over the last 90 days, aggregated from the scheduled probe's own samples. A day nobody measured reports no samples rather than 100%.
+     * Daily uptime per component for 90 days, in minutes.
      *
      * GET /status/history
      *
@@ -1091,7 +1261,7 @@ class Client
      */
     public function getStatusHistory(?array $query = null): array
     {
-        return $this->request('GET', '/status/history', null, $query);
+        return $this->request('GET', '/status/history', null, $query, null);
     }
 
     /**
@@ -1103,7 +1273,7 @@ class Client
      */
     public function getSupport(?array $query = null): array
     {
-        return $this->request('GET', '/support', null, $query);
+        return $this->request('GET', '/support', null, $query, null);
     }
 
     /**
@@ -1115,7 +1285,7 @@ class Client
      */
     public function getSupportAttachmentsByIdDownload(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/support/attachments/{id}/download'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/support/attachments/{id}/download'), null, null, null);
     }
 
     /**
@@ -1127,7 +1297,7 @@ class Client
      */
     public function getSupportByRef(string $ref): array
     {
-        return $this->request('GET', str_replace(['{ref}'], [$ref], '/support/{ref}'), null, null);
+        return $this->request('GET', str_replace(['{ref}'], [$ref], '/support/{ref}'), null, null, null);
     }
 
     /**
@@ -1139,11 +1309,11 @@ class Client
      */
     public function getSupportConfig(): array
     {
-        return $this->request('GET', '/support/config', null, null);
+        return $this->request('GET', '/support/config', null, null, null);
     }
 
     /**
-     * Every suppressed address or domain for this account (global platform rows included).
+     * Suppressions recorded on this account, with a count of platform-wide rows and none of their addresses.
      *
      * GET /suppressions
      *
@@ -1151,7 +1321,19 @@ class Client
      */
     public function getSuppressions(?array $query = null): array
     {
-        return $this->request('GET', '/suppressions', null, $query);
+        return $this->request('GET', '/suppressions', null, $query, null);
+    }
+
+    /**
+     * One suppression, by its id or by the address.
+     *
+     * GET /suppressions/{id}
+     *
+     * @return array<string,mixed>
+     */
+    public function getSuppressionsById(string $id): array
+    {
+        return $this->request('GET', str_replace(['{id}'], [$id], '/suppressions/{id}'), null, null, null);
     }
 
     /**
@@ -1163,7 +1345,7 @@ class Client
      */
     public function getTeamInvites(?array $query = null): array
     {
-        return $this->request('GET', '/team/invites', null, $query);
+        return $this->request('GET', '/team/invites', null, $query, null);
     }
 
     /**
@@ -1175,11 +1357,11 @@ class Client
      */
     public function getTeamMe(): array
     {
-        return $this->request('GET', '/team/me', null, null);
+        return $this->request('GET', '/team/me', null, null, null);
     }
 
     /**
-     * Everyone on this account and the role each one holds. Owner, admin, viewer — three roles, and seats are never billed per seat.
+     * Everyone on this account and the role each one holds.
      *
      * GET /team/members
      *
@@ -1187,7 +1369,7 @@ class Client
      */
     public function getTeamMembers(?array $query = null): array
     {
-        return $this->request('GET', '/team/members', null, $query);
+        return $this->request('GET', '/team/members', null, $query, null);
     }
 
     /**
@@ -1199,7 +1381,7 @@ class Client
      */
     public function getTemplates(?array $query = null): array
     {
-        return $this->request('GET', '/templates', null, $query);
+        return $this->request('GET', '/templates', null, $query, null);
     }
 
     /**
@@ -1211,7 +1393,7 @@ class Client
      */
     public function getTemplatesById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/templates/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/templates/{id}'), null, null, null);
     }
 
     /**
@@ -1223,7 +1405,7 @@ class Client
      */
     public function getTemplatesByIdDiff(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/templates/{id}/diff'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/templates/{id}/diff'), null, $query, null);
     }
 
     /**
@@ -1235,7 +1417,7 @@ class Client
      */
     public function getTemplatesByIdVersions(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/templates/{id}/versions'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/templates/{id}/versions'), null, $query, null);
     }
 
     /**
@@ -1247,7 +1429,19 @@ class Client
      */
     public function getTemplatesByIdVersionsByN(string $id, string $n): array
     {
-        return $this->request('GET', str_replace(['{id}', '{n}'], [$id, $n], '/templates/{id}/versions/{n}'), null, null);
+        return $this->request('GET', str_replace(['{id}', '{n}'], [$id, $n], '/templates/{id}/versions/{n}'), null, null, null);
+    }
+
+    /**
+     * The DNS records a sending domain needs, and the exact records to publish.
+     *
+     * GET /tools/dns/{domain}
+     *
+     * @return array<string,mixed>
+     */
+    public function getToolsDnsByDomain(string $domain): array
+    {
+        return $this->request('GET', str_replace(['{domain}'], [$domain], '/tools/dns/{domain}'), null, null, null);
     }
 
     /**
@@ -1259,7 +1453,7 @@ class Client
      */
     public function getTopics(?array $query = null): array
     {
-        return $this->request('GET', '/topics', null, $query);
+        return $this->request('GET', '/topics', null, $query, null);
     }
 
     /**
@@ -1271,11 +1465,11 @@ class Client
      */
     public function getTopicsById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/topics/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/topics/{id}'), null, null, null);
     }
 
     /**
-     * The remediation checklist ticks for this account. Per account, not per browser — the work one person does is done for everyone on it.
+     * The remediation checklist ticks for this account.
      *
      * GET /trust/remediation
      *
@@ -1283,11 +1477,11 @@ class Client
      */
     public function getTrustRemediation(): array
     {
-        return $this->request('GET', '/trust/remediation', null, null);
+        return $this->request('GET', '/trust/remediation', null, null, null);
     }
 
     /**
-     * This account’s standing, machine-readable. An agent can query it and back off before enforcement does it for them.
+     * This account’s standing, machine-readable.
      *
      * GET /trust/standing
      *
@@ -1295,11 +1489,11 @@ class Client
      */
     public function getTrustStanding(): array
     {
-        return $this->request('GET', '/trust/standing', null, null);
+        return $this->request('GET', '/trust/standing', null, null, null);
     }
 
     /**
-     * The published enforcement thresholds and the ladder they drive. Same constants the ladder acts on, so nothing that draws a line has to hard-code one.
+     * The published enforcement thresholds and the ladder they drive.
      *
      * GET /trust/thresholds
      *
@@ -1307,11 +1501,11 @@ class Client
      */
     public function getTrustThresholds(): array
     {
-        return $this->request('GET', '/trust/thresholds', null, null);
+        return $this->request('GET', '/trust/thresholds', null, null, null);
     }
 
     /**
-     * This period usage, per key: budget, consumed, remaining, rate window, last used. The bill, made legible.
+     * This period usage, per key: budget, consumed, remaining, rate window, last used.
      *
      * GET /usage
      *
@@ -1319,11 +1513,11 @@ class Client
      */
     public function getUsage(): array
     {
-        return $this->request('GET', '/usage', null, null);
+        return $this->request('GET', '/usage', null, null, null);
     }
 
     /**
-     * List endpoints. Secrets are never returned after creation.
+     * List endpoints.
      *
      * GET /webhooks
      *
@@ -1331,7 +1525,7 @@ class Client
      */
     public function getWebhooks(?array $query = null): array
     {
-        return $this->request('GET', '/webhooks', null, $query);
+        return $this->request('GET', '/webhooks', null, $query, null);
     }
 
     /**
@@ -1343,7 +1537,7 @@ class Client
      */
     public function getWebhooksById(string $id): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/webhooks/{id}'), null, null);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/webhooks/{id}'), null, null, null);
     }
 
     /**
@@ -1355,11 +1549,11 @@ class Client
      */
     public function getWebhooksByIdDeadLetters(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/webhooks/{id}/dead-letters'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/webhooks/{id}/dead-letters'), null, $query, null);
     }
 
     /**
-     * Every delivery to this endpoint, with each attempt and what the receiver answered (A9).
+     * Every delivery to this endpoint, with each attempt and what the receiver answered.
      *
      * GET /webhooks/{id}/deliveries
      *
@@ -1367,91 +1561,115 @@ class Client
      */
     public function getWebhooksByIdDeliveries(string $id, ?array $query = null): array
     {
-        return $this->request('GET', str_replace(['{id}'], [$id], '/webhooks/{id}/deliveries'), null, $query);
+        return $this->request('GET', str_replace(['{id}'], [$id], '/webhooks/{id}/deliveries'), null, $query, null);
     }
 
     /**
-     * Console: the onboarding answers — your name, the company (which becomes the account name), the website, what you will send and roughly how much. Send completed: true to finish; only your name is required.
+     * Change account settings.
+     *
+     * PATCH /account
+     *
+     * @return array<string,mixed>
+     */
+    public function patchAccount(?array $body = null, ?string $idempotencyKey = null): array
+    {
+        return $this->request('PATCH', '/account', $body, null, $idempotencyKey);
+    }
+
+    /**
+     * Console: the onboarding answers — your name, the company (which becomes the account name), the website, what you will send and roughly how much.
      *
      * PATCH /account/onboarding
      *
      * @return array<string,mixed>
      */
-    public function patchAccountOnboarding(?array $body = null): array
+    public function patchAccountOnboarding(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', '/account/onboarding', $body, null);
+        return $this->request('PATCH', '/account/onboarding', $body, null, $idempotencyKey);
     }
 
     /**
-     * Rename a key or change its domain scope and scopes. The token is unchanged — use POST /api-keys/:id/rotate for that.
+     * Rename a key or change its domain scope and scopes.
      *
      * PATCH /api-keys/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchApiKeysById(string $id, ?array $body = null): array
+    public function patchApiKeysById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/api-keys/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/api-keys/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Edit a draft or disabled automation. Enabling snapshots a version — a running automation never executes a half-edited definition.
+     * Alias of PATCH /contacts/{id}.
+     *
+     * PATCH /audiences/{audienceId}/contacts/{id}
+     *
+     * @return array<string,mixed>
+     */
+    public function patchAudiencesByAudienceIdContactsById(string $audienceId, string $id, ?array $body = null, ?string $idempotencyKey = null): array
+    {
+        return $this->request('PATCH', str_replace(['{audienceId}', '{id}'], [$audienceId, $id], '/audiences/{audienceId}/contacts/{id}'), $body, null, $idempotencyKey);
+    }
+
+    /**
+     * Edit a draft or disabled automation.
      *
      * PATCH /automations/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchAutomationsById(string $id, ?array $body = null): array
+    public function patchAutomationsById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/automations/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/automations/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Edit a DRAFT — or rename ANY broadcast. Sent content is immutable.
+     * Edit an unsent broadcast, or rename ANY one.
      *
      * PATCH /broadcasts/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchBroadcastsById(string $id, ?array $body = null): array
+    public function patchBroadcastsById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/broadcasts/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/broadcasts/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Edit one contact by id: address, status, properties. Properties merge; an explicit null removes one.
+     * Edit one contact by id or email.
      *
      * PATCH /contacts/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchContactsById(string $id, ?array $body = null): array
+    public function patchContactsById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/contacts/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/contacts/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Record this contact’s answer for one or more topics. Answers are absolute — nothing is inferred from what is left out.
+     * Record this contact’s answer for one or more topics.
      *
      * PATCH /contacts/{id}/topics
      *
      * @return array<string,mixed>
      */
-    public function patchContactsByIdTopics(string $id, ?array $body = null): array
+    public function patchContactsByIdTopics(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/contacts/{id}/topics'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/contacts/{id}/topics'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Turn click or open tracking on, or change the tracking subdomain. Name, region and return-path cannot change.
+     * Turn click or open tracking on, or change the tracking subdomain.
      *
      * PATCH /domains/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchDomainsById(string $id, ?array $body = null): array
+    public function patchDomainsById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/domains/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/domains/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
@@ -1461,93 +1679,93 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function patchEmailsById(string $id, ?array $body = null): array
+    public function patchEmailsById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/emails/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/emails/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Declare or re-declare an event’s fields. Adding a field to a strict event starts refusing payloads that omit it — that is the point.
+     * Declare or re-declare an event’s fields.
      *
      * PATCH /events/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchEventsById(string $id, ?array $body = null): array
+    public function patchEventsById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/events/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/events/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Set or clear this key’s period budget and per-minute ceiling. An API key may lower its own; raising one is a person’s decision, made in the console.
+     * Set or clear this key’s period budget and per-minute ceiling.
      *
      * PATCH /limits/keys/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchLimitsKeysById(string $id, ?array $body = null): array
+    public function patchLimitsKeysById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/limits/keys/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/limits/keys/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Turn a notification type on or off per channel. The gate is the type — there is no severity to mute instead.
+     * Turn a notification type on or off per channel.
      *
      * PATCH /notifications/preferences
      *
      * @return array<string,mixed>
      */
-    public function patchNotificationsPreferences(?array $body = null): array
+    public function patchNotificationsPreferences(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', '/notifications/preferences', $body, null);
+        return $this->request('PATCH', '/notifications/preferences', $body, null, $idempotencyKey);
     }
 
     /**
-     * Rename or change the rules. Membership re-evaluates immediately.
+     * Rename or change the rules.
      *
      * PATCH /segments/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchSegmentsById(string $id, ?array $body = null): array
+    public function patchSegmentsById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/segments/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/segments/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Change a member’s role. The last owner cannot be demoted.
+     * Change a member’s role.
      *
      * PATCH /team/members/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchTeamMembersById(string $id, ?array $body = null): array
+    public function patchTeamMembersById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/team/members/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/team/members/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Edit the draft. Published templates are immutable.
+     * Edit the draft.
      *
      * PATCH /templates/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchTemplatesById(string $id, ?array $body = null): array
+    public function patchTemplatesById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/templates/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/templates/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Rename a topic or change its default. Changing the default never rewrites an answer a contact already gave.
+     * Rename a topic or change its default.
      *
      * PATCH /topics/{id}
      *
      * @return array<string,mixed>
      */
-    public function patchTopicsById(string $id, ?array $body = null): array
+    public function patchTopicsById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/topics/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/topics/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
@@ -1557,57 +1775,69 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function patchWebhooksById(string $id, ?array $body = null): array
+    public function patchWebhooksById(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PATCH', str_replace(['{id}'], [$id], '/webhooks/{id}'), $body, null);
+        return $this->request('PATCH', str_replace(['{id}'], [$id], '/webhooks/{id}'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Execute the held send through the normal accept path. A person signed in to the console decides; the action row records who and when.
+     * Execute the held send through the normal accept path.
      *
      * POST /agent-actions/{id}/approve
      *
      * @return array<string,mixed>
      */
-    public function postAgentActionsByIdApprove(string $id): array
+    public function postAgentActionsByIdApprove(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/agent-actions/{id}/approve'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/agent-actions/{id}/approve'), null, null, $idempotencyKey);
     }
 
     /**
-     * Refuse the held send. A person signed in to the console decides; the reason is preserved with the row.
+     * Refuse the held send.
      *
      * POST /agent-actions/{id}/reject
      *
      * @return array<string,mixed>
      */
-    public function postAgentActionsByIdReject(string $id, ?array $body = null): array
+    public function postAgentActionsByIdReject(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/agent-actions/{id}/reject'), $body, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/agent-actions/{id}/reject'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Create an API key. The token is shown exactly once.
+     * Create an API key.
      *
      * POST /api-keys
      *
      * @return array<string,mixed>
      */
-    public function postApiKeys(?array $body = null): array
+    public function postApiKeys(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/api-keys', $body, null);
+        return $this->request('POST', '/api-keys', $body, null, $idempotencyKey);
     }
 
     /**
-     * Rotate an API key. The new token is returned once; the token it replaces keeps working for grace_hours (0, 1 or 24).
+     * Rotate an API key.
      *
      * POST /api-keys/{id}/rotate
      *
      * @return array<string,mixed>
      */
-    public function postApiKeysByIdRotate(string $id, ?array $body = null): array
+    public function postApiKeysByIdRotate(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/api-keys/{id}/rotate'), $body, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/api-keys/{id}/rotate'), $body, null, $idempotencyKey);
+    }
+
+    /**
+     * Alias of POST /contacts.
+     *
+     * POST /audiences/{audienceId}/contacts
+     *
+     * @return array<string,mixed>
+     */
+    public function postAudiencesByAudienceIdContacts(string $audienceId, ?array $body = null, ?string $idempotencyKey = null): array
+    {
+        return $this->request('POST', str_replace(['{audienceId}'], [$audienceId], '/audiences/{audienceId}/contacts'), $body, null, $idempotencyKey);
     }
 
     /**
@@ -1617,21 +1847,21 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postAutomations(?array $body = null): array
+    public function postAutomations(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/automations', $body, null);
+        return $this->request('POST', '/automations', $body, null, $idempotencyKey);
     }
 
     /**
-     * Stop firing. Versions stay for audit.
+     * Stop firing.
      *
      * POST /automations/{id}/disable
      *
      * @return array<string,mixed>
      */
-    public function postAutomationsByIdDisable(string $id): array
+    public function postAutomationsByIdDisable(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/automations/{id}/disable'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/automations/{id}/disable'), null, null, $idempotencyKey);
     }
 
     /**
@@ -1641,9 +1871,9 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postAutomationsByIdEnable(string $id): array
+    public function postAutomationsByIdEnable(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/automations/{id}/enable'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/automations/{id}/enable'), null, null, $idempotencyKey);
     }
 
     /**
@@ -1653,21 +1883,21 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postBillingCheckout(?array $body = null): array
+    public function postBillingCheckout(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/billing/checkout', $body, null);
+        return $this->request('POST', '/billing/checkout', $body, null, $idempotencyKey);
     }
 
     /**
-     * Console: choose Free on the plan step. Paid plans go through POST /billing/checkout. Idempotent; owner only.
+     * Console: choose Free on the plan step.
      *
      * POST /billing/plan
      *
      * @return array<string,mixed>
      */
-    public function postBillingPlan(?array $body = null): array
+    public function postBillingPlan(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/billing/plan', $body, null);
+        return $this->request('POST', '/billing/plan', $body, null, $idempotencyKey);
     }
 
     /**
@@ -1677,21 +1907,21 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postBillingPortal(): array
+    public function postBillingPortal(?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/billing/portal', null, null);
+        return $this->request('POST', '/billing/portal', null, null, $idempotencyKey);
     }
 
     /**
-     * Draft a broadcast to a segment. Content comes from a template version or an inline body.
+     * Draft a broadcast to a segment.
      *
      * POST /broadcasts
      *
      * @return array<string,mixed>
      */
-    public function postBroadcasts(?array $body = null): array
+    public function postBroadcasts(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/broadcasts', $body, null);
+        return $this->request('POST', '/broadcasts', $body, null, $idempotencyKey);
     }
 
     /**
@@ -1701,81 +1931,129 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postBroadcastsByIdArchive(string $id): array
+    public function postBroadcastsByIdArchive(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/broadcasts/{id}/archive'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/broadcasts/{id}/archive'), null, null, $idempotencyKey);
     }
 
     /**
-     * Cancel a scheduled broadcast before it sends. It returns to draft, editable and re-schedulable.
+     * Cancel a scheduled broadcast, or stop one that is still sending.
      *
      * POST /broadcasts/{id}/cancel
      *
      * @return array<string,mixed>
      */
-    public function postBroadcastsByIdCancel(string $id): array
+    public function postBroadcastsByIdCancel(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/broadcasts/{id}/cancel'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/broadcasts/{id}/cancel'), null, null, $idempotencyKey);
     }
 
     /**
-     * Send now. Content is SNAPSHOTTED: the segment is evaluated and every member rendered with their properties; the result is immutable.
+     * Send now, or schedule it with scheduled_at/scheduledAt — the same time grammar as PATCH /broadcasts/:id, refused if it is in the past.
      *
      * POST /broadcasts/{id}/send
      *
      * @return array<string,mixed>
      */
-    public function postBroadcastsByIdSend(string $id): array
+    public function postBroadcastsByIdSend(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/broadcasts/{id}/send'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/broadcasts/{id}/send'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Create or update a contact by email. Properties are typed from their value and auto-created — nothing needs pre-declaring.
+     * Create or update a contact by email.
      *
      * POST /contacts
      *
      * @return array<string,mixed>
      */
-    public function postContacts(?array $body = null): array
+    public function postContacts(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/contacts', $body, null);
+        return $this->request('POST', '/contacts', $body, null, $idempotencyKey);
     }
 
     /**
-     * Provision a dedicated IP for this account. It starts warming on the published curve.
+     * Update up to 1,000 contacts that already exist.
+     *
+     * POST /contacts/batch
+     *
+     * @return array<string,mixed>
+     */
+    public function postContactsBatch(?array $body = null, ?string $idempotencyKey = null): array
+    {
+        return $this->request('POST', '/contacts/batch', $body, null, $idempotencyKey);
+    }
+
+    /**
+     * Mark a contact active again after they opt back in.
+     *
+     * POST /contacts/{id}/resubscribe
+     *
+     * @return array<string,mixed>
+     */
+    public function postContactsByIdResubscribe(string $id, ?array $body = null, ?string $idempotencyKey = null): array
+    {
+        return $this->request('POST', str_replace(['{id}'], [$id], '/contacts/{id}/resubscribe'), $body, null, $idempotencyKey);
+    }
+
+    /**
+     * Not available.
+     *
+     * POST /contacts/{id}/segments/{segmentId}
+     *
+     * @return array<string,mixed>
+     */
+    public function postContactsByIdSegmentsBySegmentId(string $id, string $segmentId, ?string $idempotencyKey = null): array
+    {
+        return $this->request('POST', str_replace(['{id}', '{segmentId}'], [$id, $segmentId], '/contacts/{id}/segments/{segmentId}'), null, null, $idempotencyKey);
+    }
+
+    /**
+     * Update contacts from a CSV.
+     *
+     * POST /contacts/imports
+     *
+     * @return array<string,mixed>
+     */
+    public function postContactsImports(?array $body = null, ?string $idempotencyKey = null): array
+    {
+        return $this->request('POST', '/contacts/imports', $body, null, $idempotencyKey);
+    }
+
+    /**
+     * Refused: a dedicated IP is assigned by us from the addresses we send from — ask support.
      *
      * POST /dedicated-ips
      *
      * @return array<string,mixed>
      */
-    public function postDedicatedIps(?array $body = null): array
+    public function postDedicatedIps(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/dedicated-ips', $body, null);
+        return $this->request('POST', '/dedicated-ips', $body, null, $idempotencyKey);
     }
 
     /**
-     * Persist today rates as a snapshot row. Idempotent per domain per day.
+     * Persist today rates as a snapshot row.
      *
      * POST /deliverability/domains/{id}/snapshot
      *
      * @return array<string,mixed>
      */
-    public function postDeliverabilityDomainsByIdSnapshot(string $id): array
+    public function postDeliverabilityDomainsByIdSnapshot(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/deliverability/domains/{id}/snapshot'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/deliverability/domains/{id}/snapshot'), null, null, $idempotencyKey);
     }
 
     /**
-     * Register a sending domain. Region is optional and defaults to us (Oregon); the stored value is returned.
+     * Register a sending domain.
      *
      * POST /domains
      *
      * @return array<string,mixed>
      */
-    public function postDomains(?array $body = null): array
+    public function postDomains(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/domains', $body, null);
+        return $this->request('POST', '/domains', $body, null, $idempotencyKey);
     }
 
     /**
@@ -1785,33 +2063,33 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postDomainsByIdVerify(string $id): array
+    public function postDomainsByIdVerify(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/domains/{id}/verify'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/domains/{id}/verify'), null, null, $idempotencyKey);
     }
 
     /**
-     * Send an email. Returns the message id; delivery happens on the queue. Before a domain is verified, from onboarding@agentisend.com delivers only to this account's member sign-in addresses (20 per UTC day, no cc/bcc/attachments/tracking/extra headers). Addresses ending in @simulator.agentisend.com cost nothing and reach nobody.
+     * Send an email.
      *
      * POST /emails
      *
      * @return array<string,mixed>
      */
-    public function postEmails(?array $body = null): array
+    public function postEmails(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/emails', $body, null);
+        return $this->request('POST', '/emails', $body, null, $idempotencyKey);
     }
 
     /**
-     * Send up to 500 emails. Each item succeeds or fails on its own — read data[i].status.
+     * Send up to 500 emails.
      *
      * POST /emails/batch
      *
      * @return array<string,mixed>
      */
-    public function postEmailsBatch(?array $body = null): array
+    public function postEmailsBatch(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/emails/batch', $body, null);
+        return $this->request('POST', '/emails/batch', $body, null, $idempotencyKey);
     }
 
     /**
@@ -1821,33 +2099,33 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postEmailsBulkCancel(?array $body = null): array
+    public function postEmailsBulkCancel(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/emails/bulk-cancel', $body, null);
+        return $this->request('POST', '/emails/bulk-cancel', $body, null, $idempotencyKey);
     }
 
     /**
-     * Cancel a scheduled or queued email. Already-sent mail is history, not cancellable.
+     * Cancel a scheduled or queued email.
      *
      * POST /emails/{id}/cancel
      *
      * @return array<string,mixed>
      */
-    public function postEmailsByIdCancel(string $id): array
+    public function postEmailsByIdCancel(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/emails/{id}/cancel'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/emails/{id}/cancel'), null, null, $idempotencyKey);
     }
 
     /**
-     * Move an email to a new time. Works from scheduled AND canceled — a cancel is never terminal.
+     * Move an email to a new time.
      *
      * POST /emails/{id}/reschedule
      *
      * @return array<string,mixed>
      */
-    public function postEmailsByIdReschedule(string $id, ?array $body = null): array
+    public function postEmailsByIdReschedule(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/emails/{id}/reschedule'), $body, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/emails/{id}/reschedule'), $body, null, $idempotencyKey);
     }
 
     /**
@@ -1857,141 +2135,141 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postEmailsLint(?array $body = null): array
+    public function postEmailsLint(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/emails/lint', $body, null);
+        return $this->request('POST', '/emails/lint', $body, null, $idempotencyKey);
     }
 
     /**
-     * Run EVERY send gate without sending: domain, sandbox, trust, suppression, budget, loop, content, verifier. The report matches what POST /emails would do, byte for byte — one code path.
+     * Run EVERY send gate without sending: domain, sandbox, trust, suppression, budget, loop, content, verifier.
      *
      * POST /emails/preflight
      *
      * @return array<string,mixed>
      */
-    public function postEmailsPreflight(?array $body = null): array
+    public function postEmailsPreflight(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/emails/preflight', $body, null);
+        return $this->request('POST', '/emails/preflight', $body, null, $idempotencyKey);
     }
 
     /**
-     * Reply to a received email. Threads on In-Reply-To and References, and runs every send check.
+     * Not open yet: reply to a received email.
      *
      * POST /emails/receiving/{id}/reply
      *
      * @return array<string,mixed>
      */
-    public function postEmailsReceivingByIdReply(string $id, ?array $body = null): array
+    public function postEmailsReceivingByIdReply(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/emails/receiving/{id}/reply'), $body, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/emails/receiving/{id}/reply'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Ingest a custom event. Matching enabled automations fire synchronously (202 once enqueued).
+     * Ingest a custom event.
      *
      * POST /events
      *
      * @return array<string,mixed>
      */
-    public function postEvents(?array $body = null): array
+    public function postEvents(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/events', $body, null);
+        return $this->request('POST', '/events', $body, null, $idempotencyKey);
     }
 
     /**
-     * Accept an invitation. Requires a session signed in as the invited address; a person who has never signed in before is provisioned into the inviting account, not a new one.
+     * Accept an invitation.
      *
      * POST /invite/{token}/accept
      *
      * @return array<string,mixed>
      */
-    public function postInviteByTokenAccept(string $token): array
+    public function postInviteByTokenAccept(string $token, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{token}'], [$token], '/invite/{token}/accept'), null, null);
+        return $this->request('POST', str_replace(['{token}'], [$token], '/invite/{token}/accept'), null, null, $idempotencyKey);
     }
 
     /**
-     * Stop this key from sending, immediately. Takes effect on the next request.
+     * Stop this key from sending, immediately.
      *
      * POST /limits/keys/{id}/kill
      *
      * @return array<string,mixed>
      */
-    public function postLimitsKeysByIdKill(string $id, ?array $body = null): array
+    public function postLimitsKeysByIdKill(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/limits/keys/{id}/kill'), $body, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/limits/keys/{id}/kill'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Undo the kill switch. A person signed in to the console does this; budgets and ceilings are unchanged.
+     * Undo the kill switch.
      *
      * POST /limits/keys/{id}/resume
      *
      * @return array<string,mixed>
      */
-    public function postLimitsKeysByIdResume(string $id): array
+    public function postLimitsKeysByIdResume(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/limits/keys/{id}/resume'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/limits/keys/{id}/resume'), null, null, $idempotencyKey);
     }
 
     /**
-     * Pause every key on this account at once. Takes effect on the next request.
+     * Pause every key on this account at once.
      *
      * POST /limits/kill-all
      *
      * @return array<string,mixed>
      */
-    public function postLimitsKillAll(?array $body = null): array
+    public function postLimitsKillAll(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/limits/kill-all', $body, null);
+        return $this->request('POST', '/limits/kill-all', $body, null, $idempotencyKey);
     }
 
     /**
-     * Undo the global kill switch. A person signed in to the console does this; budgets and ceilings are unchanged.
+     * Undo the global kill switch.
      *
      * POST /limits/resume-all
      *
      * @return array<string,mixed>
      */
-    public function postLimitsResumeAll(?array $body = null): array
+    public function postLimitsResumeAll(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/limits/resume-all', $body, null);
+        return $this->request('POST', '/limits/resume-all', $body, null, $idempotencyKey);
     }
 
     /**
-     * Mark one notification read. Reading it never resolves it — the condition ends the row, not the reader.
+     * Mark one notification read.
      *
      * POST /notifications/{id}/read
      *
      * @return array<string,mixed>
      */
-    public function postNotificationsByIdRead(string $id): array
+    public function postNotificationsByIdRead(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/notifications/{id}/read'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/notifications/{id}/read'), null, null, $idempotencyKey);
     }
 
     /**
-     * Mark notifications read. With no ids, every open row on the account is marked — the bell’s "Mark all read".
+     * Mark notifications read.
      *
      * POST /notifications/read
      *
      * @return array<string,mixed>
      */
-    public function postNotificationsRead(?array $body = null): array
+    public function postNotificationsRead(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/notifications/read', $body, null);
+        return $this->request('POST', '/notifications/read', $body, null, $idempotencyKey);
     }
 
     /**
-     * Create a dynamic segment. Rules AND together over properties and status.
+     * Create a dynamic segment.
      *
      * POST /segments
      *
      * @return array<string,mixed>
      */
-    public function postSegments(?array $body = null): array
+    public function postSegments(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/segments', $body, null);
+        return $this->request('POST', '/segments', $body, null, $idempotencyKey);
     }
 
     /**
@@ -2001,9 +2279,9 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postSupport(?array $body = null): array
+    public function postSupport(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/support', $body, null);
+        return $this->request('POST', '/support', $body, null, $idempotencyKey);
     }
 
     /**
@@ -2013,9 +2291,9 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postSupportByRefCsat(string $ref, ?array $body = null): array
+    public function postSupportByRefCsat(string $ref, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{ref}'], [$ref], '/support/{ref}/csat'), $body, null);
+        return $this->request('POST', str_replace(['{ref}'], [$ref], '/support/{ref}/csat'), $body, null, $idempotencyKey);
     }
 
     /**
@@ -2025,9 +2303,9 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postSupportByRefMessages(string $ref, ?array $body = null): array
+    public function postSupportByRefMessages(string $ref, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{ref}'], [$ref], '/support/{ref}/messages'), $body, null);
+        return $this->request('POST', str_replace(['{ref}'], [$ref], '/support/{ref}/messages'), $body, null, $idempotencyKey);
     }
 
     /**
@@ -2037,9 +2315,9 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postSupportByRefReopen(string $ref, ?array $body = null): array
+    public function postSupportByRefReopen(string $ref, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{ref}'], [$ref], '/support/{ref}/reopen'), $body, null);
+        return $this->request('POST', str_replace(['{ref}'], [$ref], '/support/{ref}/reopen'), $body, null, $idempotencyKey);
     }
 
     /**
@@ -2049,81 +2327,81 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postSupportByRefResolve(string $ref, ?array $body = null): array
+    public function postSupportByRefResolve(string $ref, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{ref}'], [$ref], '/support/{ref}/resolve'), $body, null);
+        return $this->request('POST', str_replace(['{ref}'], [$ref], '/support/{ref}/resolve'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Stage files to attach to a support message. JSON base64; 5 files, 10 MB each, 25 MB total.
+     * Stage files to attach to a support message.
      *
      * POST /support/uploads
      *
      * @return array<string,mixed>
      */
-    public function postSupportUploads(?array $body = null): array
+    public function postSupportUploads(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/support/uploads', $body, null);
+        return $this->request('POST', '/support/uploads', $body, null, $idempotencyKey);
     }
 
     /**
-     * Suppress an address or a whole domain (send "@example.com"). Idempotent — an existing row is returned.
+     * Suppress an address or a whole domain (send "@example.com").
      *
      * POST /suppressions
      *
      * @return array<string,mixed>
      */
-    public function postSuppressions(?array $body = null): array
+    public function postSuppressions(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/suppressions', $body, null);
+        return $this->request('POST', '/suppressions', $body, null, $idempotencyKey);
     }
 
     /**
-     * Suppress up to 500 addresses in one call. Each item succeeds or fails on its own — read data[i].status.
+     * Suppress up to 500 addresses in one call.
      *
      * POST /suppressions/batch/add
      *
      * @return array<string,mixed>
      */
-    public function postSuppressionsBatchAdd(?array $body = null): array
+    public function postSuppressionsBatchAdd(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/suppressions/batch/add', $body, null);
+        return $this->request('POST', '/suppressions/batch/add', $body, null, $idempotencyKey);
     }
 
     /**
-     * Lift up to 500 suppressions by address. An address that was not suppressed reads not_found, not an error.
+     * Lift up to 500 suppressions by address.
      *
      * POST /suppressions/batch/remove
      *
      * @return array<string,mixed>
      */
-    public function postSuppressionsBatchRemove(?array $body = null): array
+    public function postSuppressionsBatchRemove(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/suppressions/batch/remove', $body, null);
+        return $this->request('POST', '/suppressions/batch/remove', $body, null, $idempotencyKey);
     }
 
     /**
-     * Invite an address at a role. The mail carries a link that only works while signed in as that address.
+     * Invite an address at a role.
      *
      * POST /team/invites
      *
      * @return array<string,mixed>
      */
-    public function postTeamInvites(?array $body = null): array
+    public function postTeamInvites(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/team/invites', $body, null);
+        return $this->request('POST', '/team/invites', $body, null, $idempotencyKey);
     }
 
     /**
-     * Add someone to this account. Membership begins when they accept, so this returns the pending invitation — the same call as POST /team/invites.
+     * Add someone to this account.
      *
      * POST /team/members
      *
      * @return array<string,mixed>
      */
-    public function postTeamMembers(?array $body = null): array
+    public function postTeamMembers(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/team/members', $body, null);
+        return $this->request('POST', '/team/members', $body, null, $idempotencyKey);
     }
 
     /**
@@ -2133,21 +2411,21 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postTemplates(?array $body = null): array
+    public function postTemplates(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/templates', $body, null);
+        return $this->request('POST', '/templates', $body, null, $idempotencyKey);
     }
 
     /**
-     * Copy a template into a new editable draft. The copy carries no version history.
+     * Copy a template into a new editable draft.
      *
      * POST /templates/{id}/duplicate
      *
      * @return array<string,mixed>
      */
-    public function postTemplatesByIdDuplicate(string $id, ?array $body = null): array
+    public function postTemplatesByIdDuplicate(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/templates/{id}/duplicate'), $body, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/templates/{id}/duplicate'), $body, null, $idempotencyKey);
     }
 
     /**
@@ -2157,105 +2435,105 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postTemplatesByIdPublish(string $id): array
+    public function postTemplatesByIdPublish(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/templates/{id}/publish'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/templates/{id}/publish'), null, null, $idempotencyKey);
     }
 
     /**
-     * Render a version with variables (defaults to the current published one; pass "draft" for the working copy). Unknown variables fail with the names listed.
+     * Render a version with variables (defaults to the current published one; pass "draft" for the working copy).
      *
      * POST /templates/{id}/render
      *
      * @return array<string,mixed>
      */
-    public function postTemplatesByIdRender(string $id, ?array $body = null): array
+    public function postTemplatesByIdRender(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/templates/{id}/render'), $body, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/templates/{id}/render'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Rollback creates a NEW draft from an older version and puts the template back into draft - history is never rewritten, and what is live does not move until that draft is published.
+     * Start a new draft from an older version.
      *
      * POST /templates/{id}/rollback
      *
      * @return array<string,mixed>
      */
-    public function postTemplatesByIdRollback(string $id, ?array $body = null): array
+    public function postTemplatesByIdRollback(string $id, ?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/templates/{id}/rollback'), $body, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/templates/{id}/rollback'), $body, null, $idempotencyKey);
     }
 
     /**
-     * Create a subscription topic. default_subscribed=false makes it opt-in: silence means no.
+     * Create a subscription topic.
      *
      * POST /topics
      *
      * @return array<string,mixed>
      */
-    public function postTopics(?array $body = null): array
+    public function postTopics(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/topics', $body, null);
+        return $this->request('POST', '/topics', $body, null, $idempotencyKey);
     }
 
     /**
-     * File an appeal against the current standing. The reason is recorded verbatim; a human answers by sla_deadline_at.
+     * File an appeal against the current standing.
      *
      * POST /trust/appeal
      *
      * @return array<string,mixed>
      */
-    public function postTrustAppeal(?array $body = null): array
+    public function postTrustAppeal(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/trust/appeal', $body, null);
+        return $this->request('POST', '/trust/appeal', $body, null, $idempotencyKey);
     }
 
     /**
-     * Tick or untick one remediation item. Returns the whole checklist.
+     * Tick or untick one remediation item.
      *
      * POST /trust/remediation
      *
      * @return array<string,mixed>
      */
-    public function postTrustRemediation(?array $body = null): array
+    public function postTrustRemediation(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/trust/remediation', $body, null);
+        return $this->request('POST', '/trust/remediation', $body, null, $idempotencyKey);
     }
 
     /**
-     * Register an endpoint. The signing secret is returned exactly once.
+     * Register an endpoint.
      *
      * POST /webhooks
      *
      * @return array<string,mixed>
      */
-    public function postWebhooks(?array $body = null): array
+    public function postWebhooks(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/webhooks', $body, null);
+        return $this->request('POST', '/webhooks', $body, null, $idempotencyKey);
     }
 
     /**
-     * Re-send past events to this endpoint, by time range and/or a single event id (PRD B2).
+     * Re-send past events to this endpoint, by time range and/or a single event id.
      *
      * POST /webhooks/{id}/replay
      *
      * @return array<string,mixed>
      */
-    public function postWebhooksByIdReplay(string $id, ?array $query = null): array
+    public function postWebhooksByIdReplay(string $id, ?array $query = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/webhooks/{id}/replay'), null, $query);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/webhooks/{id}/replay'), null, $query, $idempotencyKey);
     }
 
     /**
-     * Mint a new signing secret. Returned once. The previous secret keeps verifying for 24 hours, and deliveries in that window are signed with both.
+     * Mint a new signing secret.
      *
      * POST /webhooks/{id}/rotate-secret
      *
      * @return array<string,mixed>
      */
-    public function postWebhooksByIdRotateSecret(string $id): array
+    public function postWebhooksByIdRotateSecret(string $id, ?string $idempotencyKey = null): array
     {
-        return $this->request('POST', str_replace(['{id}'], [$id], '/webhooks/{id}/rotate-secret'), null, null);
+        return $this->request('POST', str_replace(['{id}'], [$id], '/webhooks/{id}/rotate-secret'), null, null, $idempotencyKey);
     }
 
     /**
@@ -2265,20 +2543,20 @@ class Client
      *
      * @return array<string,mixed>
      */
-    public function postWebhooksStripe(): array
+    public function postWebhooksStripe(?string $idempotencyKey = null): array
     {
-        return $this->request('POST', '/webhooks/stripe', null, null);
+        return $this->request('POST', '/webhooks/stripe', null, null, $idempotencyKey);
     }
 
     /**
-     * Console: turn opt-in overage on (with a ceiling of extra emails per period) or off. Owner only; paid plans only.
+     * Console: turn opt-in overage on (with a ceiling of extra emails per period) or off.
      *
      * PUT /billing/overage
      *
      * @return array<string,mixed>
      */
-    public function putBillingOverage(?array $body = null): array
+    public function putBillingOverage(?array $body = null, ?string $idempotencyKey = null): array
     {
-        return $this->request('PUT', '/billing/overage', $body, null);
+        return $this->request('PUT', '/billing/overage', $body, null, $idempotencyKey);
     }
 }

@@ -23,4 +23,20 @@ No dependencies beyond curl and json, which every PHP install has. Laravel
 users can wrap it; nothing here assumes a framework.
 
 Refusals throw `AgentiSend\ApiError` with `code`, `fix`, `docsUrl`, `requestId`
-and `retryAfterSeconds`. `retryable()` is true only for 429 and 5xx.
+and `retryAfterSeconds`. `retryable()` returns the API's own `retryable` field,
+so a refusal the API marks as not worth retrying reads false; when the body has
+none, it is true for 429 and 5xx.
+
+## Idempotency-Key
+
+Every mutating operation takes an optional trailing `$idempotencyKey`. Pass
+one on a call you might retry — a timed-out send, a queue worker that redelivers —
+so a repeat with the same key is applied once, not twice:
+
+```php
+$key = bin2hex(random_bytes(16));
+$sent = $client->postEmails([
+    'from' => 'Acme <hello@acme.com>', 'to' => ['you@example.com'],
+    'subject' => 'Hi', 'text' => 'Hello',
+], $key);
+```
